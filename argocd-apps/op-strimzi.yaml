@@ -19,6 +19,12 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: strimzi
+  # Strimzi CRD 의 빈 properties 를 API 서버가 제거해서 생기는 가짜 차이 무시
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers:
+        - /spec/versions
   syncPolicy:
     automated:
       prune: true
