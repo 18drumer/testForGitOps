@@ -12,3 +12,10 @@ patches:
       - op: replace
         path: /spec/instances
         value: 2
+  - target:
+      kind: Service
+      name: pg-external
+    patch: |-
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 45432

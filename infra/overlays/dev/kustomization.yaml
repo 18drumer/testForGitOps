@@ -4,3 +4,11 @@ kind: Kustomization
 namespace: dev
 resources:
   - ../../base
+patches:
+  - target:
+      kind: Service
+      name: pg-external
+    patch: |-
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 35432

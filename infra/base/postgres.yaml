@@ -20,3 +20,17 @@ spec:
       memory: 256Mi
     limits:
       memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-external
+spec:
+  type: NodePort
+  selector:
+    cnpg.io/cluster: pg
+    cnpg.io/instanceRole: primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
