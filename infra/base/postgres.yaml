@@ -1,0 +1,22 @@
+# PostgreSQL (CloudNativePG 오퍼레이터)
+# 자동 생성되는 것:
+#   - Service : pg-rw(쓰기, primary) / pg-ro(읽기 전용) / pg-r(아무 인스턴스)
+#   - Secret  : pg-app (username, password, host, port, dbname, uri, jdbc-uri)
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg
+spec:
+  instances: 1            # staging overlay 에서 2 로 변경 (primary + replica)
+  storage:
+    size: 5Gi
+  bootstrap:
+    initdb:
+      database: app       # 생성할 DB 이름
+      owner: app          # DB 소유 계정 (비밀번호는 자동 생성 → pg-app Secret)
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

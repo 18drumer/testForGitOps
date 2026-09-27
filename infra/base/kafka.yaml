@@ -1,0 +1,54 @@
+# Kafka (Strimzi 오퍼레이터, KRaft 모드 - ZooKeeper 없음)
+# 접속 주소: kafka-kafka-bootstrap:9092  (같은 namespace 기준)
+---
+# 노드 풀: 실제 Kafka Pod 그룹. controller+broker 역할을 한 Pod 가 겸함
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual-role
+  labels:
+    strimzi.io/cluster: kafka      # 아래 Kafka 리소스 이름과 연결
+spec:
+  replicas: 1
+  roles:
+    - controller
+    - broker
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: 5Gi
+        kraftMetadata: shared
+  jvmOptions:
+    -Xms: 512m
+    -Xmx: 512m
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1Gi
+    limits:
+      memory: 1536Mi
+---
+# 클러스터 설정
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: kafka
+spec:
+  kafka:
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal   # 클러스터 내부 전용
+        tls: false
+    config:
+      # 브로커가 1대이므로 복제 계수는 모두 1
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
+  entityOperator:
+    topicOperator: {}   # KafkaTopic 리소스로 토픽 관리 가능
+    userOperator: {}

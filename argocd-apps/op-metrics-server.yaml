@@ -1,0 +1,28 @@
+# metrics-server (HPA 가 CPU 사용량을 읽으려면 필수) → kube-system
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: op-metrics-server
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://kubernetes-sigs.github.io/metrics-server/
+    chart: metrics-server
+    targetRevision: 3.14.0
+    helm:
+      valuesObject:
+        args:
+          - --kubelet-insecure-tls   # kubeadm 실습 클러스터(자체 서명 인증서)용
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # CRD 가 커서 필요

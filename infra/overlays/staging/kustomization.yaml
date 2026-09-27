@@ -1,0 +1,14 @@
+# staging: base + PostgreSQL 을 2대(primary + replica)로 변경
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: staging
+resources:
+  - ../../base
+patches:
+  - target:
+      kind: Cluster
+      name: pg
+    patch: |-
+      - op: replace
+        path: /spec/instances
+        value: 2

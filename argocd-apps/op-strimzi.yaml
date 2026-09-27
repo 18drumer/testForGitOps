@@ -1,0 +1,27 @@
+# 오퍼레이터: strimzi-kafka-operator (Helm chart 1.2.0) → namespace: strimzi
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: op-strimzi
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://strimzi.io/charts/
+    chart: strimzi-kafka-operator
+    targetRevision: 1.2.0
+    helm:
+      valuesObject:
+        watchAnyNamespace: true   # dev, staging 등 모든 namespace 의 Kafka 를 관리
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: strimzi
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # CRD 가 커서 필요

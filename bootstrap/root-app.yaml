@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────────────────────
+# 루트 Application (App of Apps)
+# 이 파일 하나만 kubectl apply 하면, argocd-apps/ 폴더 안의
+# 모든 Application 을 Argo CD 가 자동으로 만들어 줍니다.
+# ─────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/18drumer/testForGitOps.git   # ← 본인 저장소로 변경
+    targetRevision: main
+    path: argocd-apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true      # Git 에서 파일을 지우면 클러스터에서도 삭제
+      selfHeal: true   # 누가 kubectl 로 바꿔도 Git 상태로 되돌림

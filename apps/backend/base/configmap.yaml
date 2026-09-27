@@ -1,0 +1,12 @@
+# 백엔드 환경변수 (Spring Boot 가 자동으로 읽는 이름 규칙)
+# 서비스 이름만 쓴 이유: 백엔드와 DB/Kafka/Redis 가 같은 namespace 에 있기 때문
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+data:
+  SPRING_PROFILES_ACTIVE: dev                  # staging overlay 에서 변경
+  SPRING_DATASOURCE_URL: jdbc:postgresql://pg-rw:5432/app
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_DATA_REDIS_PORT: "6379"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka-kafka-bootstrap:9092

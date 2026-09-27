@@ -1,0 +1,6 @@
+# dev: base 그대로 사용, namespace 만 dev 로 지정
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dev
+resources:
+  - ../../base

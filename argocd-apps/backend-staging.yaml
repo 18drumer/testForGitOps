@@ -1,0 +1,30 @@
+# staging 환경 백엔드
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backend-staging
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/18drumer/testForGitOps.git   # ← 본인 저장소로 변경
+    targetRevision: main
+    path: apps/backend/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true   # CRD 가 아직 없어도 에러 대신 진행
+    retry:                                 # 오퍼레이터 준비 전이면 실패 → 자동 재시도
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

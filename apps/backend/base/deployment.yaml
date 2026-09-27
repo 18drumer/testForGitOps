@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  # replicas 는 일부러 적지 않음!
+  # → Pod 수는 HPA 가 관리. 여기 적으면 Argo CD 가 HPA 가 늘린 수를 계속 되돌림.
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          # 테스트용 임시 이미지(8080 포트로 뜨는 nginx).
+          # 실제 Spring Boot 이미지가 준비되면 overlay 의 images 항목만 바꾸면 됨.
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: backend-config
+          env:
+            # DB 계정은 CloudNativePG 가 만든 Secret 에서 가져옴 (Git 에 비밀번호 없음)
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: pg-app
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pg-app
+                  key: password
+          resources:
+            requests:          # HPA 는 이 requests 기준으로 CPU 사용률(%)을 계산 → 필수
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          # Spring Boot 로 바꾸면 path 를 /actuator/health/readiness, /liveness 로 변경
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
