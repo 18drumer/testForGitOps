@@ -176,19 +176,19 @@ Argo CD 는 3분마다 Git 을 확인합니다. 바로 반영하려면 UI 에서
 
 반대로 `kubectl scale` 같은 수동 변경은 selfHeal 때문에 Git 상태로 되돌아갑니다.
 
-## 9. 실제 Spring Boot 앱으로 교체
+## 9. 백엔드 새 버전 배포
 
-`apps/backend/overlays/dev/kustomization.yaml` 의 images 를 수정:
+백엔드 이미지는 testForK8s 저장소의 GitHub Actions 가 Docker Hub(`start31/for_k8s_test`)에 올립니다.
+태그는 커밋마다 `sha-xxxxxxx` 로 붙으므로, 배포할 태그로 `apps/backend/overlays/{dev,staging}/kustomization.yaml` 의 newTag 를 수정 후 push:
 
 ```yaml
 images:
-  - name: nginxinc/nginx-unprivileged
-    newName: ghcr.io/실제깃허브아이디/backend
-    newTag: "1.0.0"
+  - name: start31/for_k8s_test
+    newTag: sha-xxxxxxx
 ```
 
-그리고 `apps/backend/base/deployment.yaml` 의 probe path 를 `/actuator/health/readiness`, `/actuator/health/liveness` 로 변경.
-DB/Redis/Kafka 접속 정보는 이미 환경변수로 주입되어 있으므로 `application.yml` 에 따로 적을 필요가 없습니다.
+DB 접속 정보는 환경변수(`DB_HOST`, `DB_PORT`, `DB_NAME` ← ConfigMap / `DB_USERNAME`, `DB_PASSWORD` ← `pg-app` Secret)로 주입됩니다.
+Spring 프로필은 dev 는 `dev`, staging 은 `prod` 입니다.
 
 ## 10. 문제 해결
 

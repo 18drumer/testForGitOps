@@ -5,13 +5,15 @@ namespace: staging
 resources:
   - ../../base
 images:
-  - name: nginxinc/nginx-unprivileged
-    newTag: 1.27-alpine
+  - name: start31/for_k8s_test
+    newTag: sha-37069ed
 patches:
+  # 앱에 application-staging.properties 가 없으므로 운영과 같은 prod 프로필 사용
+  # (prod 는 DB 접속 정보 기본값이 없어서 주입이 빠지면 기동 실패 → 설정 누락을 바로 알 수 있음)
   - target:
       kind: ConfigMap
       name: backend-config
     patch: |-
       - op: replace
         path: /data/SPRING_PROFILES_ACTIVE
-        value: staging
+        value: prod

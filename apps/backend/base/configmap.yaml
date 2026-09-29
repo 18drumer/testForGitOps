@@ -1,4 +1,6 @@
-# 백엔드 환경변수 (Spring Boot 가 자동으로 읽는 이름 규칙)
+# 백엔드 환경변수
+# DB_* : application-{dev,prod}.properties 의 ${DB_HOST} 등 플레이스홀더에 주입됨
+#        (계정/비밀번호는 deployment.yaml 에서 pg-app Secret 으로 주입)
 # 서비스 이름만 쓴 이유: 백엔드와 DB/Kafka/Redis 가 같은 namespace 에 있기 때문
 apiVersion: v1
 kind: ConfigMap
@@ -6,7 +8,10 @@ metadata:
   name: backend-config
 data:
   SPRING_PROFILES_ACTIVE: dev                  # staging overlay 에서 변경
-  SPRING_DATASOURCE_URL: jdbc:postgresql://pg-rw:5432/app
+  DB_HOST: pg-rw                               # CloudNativePG 쓰기(primary) Service
+  DB_PORT: "5432"
+  DB_NAME: app
+  # 아래는 아직 앱에서 사용하지 않음 (Redis/Kafka 의존성 추가 시 Spring Boot 가 자동으로 읽음)
   SPRING_DATA_REDIS_HOST: redis
   SPRING_DATA_REDIS_PORT: "6379"
   SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka-kafka-bootstrap:9092

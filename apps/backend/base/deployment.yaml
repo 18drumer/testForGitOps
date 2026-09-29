@@ -17,9 +17,9 @@ spec:
     spec:
       containers:
         - name: backend
-          # 테스트용 임시 이미지(8080 포트로 뜨는 nginx).
-          # 실제 Spring Boot 이미지가 준비되면 overlay 의 images 항목만 바꾸면 됨.
-          image: nginxinc/nginx-unprivileged:1.27-alpine
+          # testForK8s 저장소의 GitHub Actions 가 Docker Hub 에 올리는 Spring Boot 이미지.
+          # 배포할 태그(sha-xxxxxxx)는 overlay 의 images 항목에서 지정.
+          image: start31/for_k8s_test
           ports:
             - name: http
               containerPort: 8080
@@ -28,12 +28,12 @@ spec:
                 name: backend-config
           env:
             # DB 계정은 CloudNativePG 가 만든 Secret 에서 가져옴 (Git 에 비밀번호 없음)
-            - name: SPRING_DATASOURCE_USERNAME
+            - name: DB_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: pg-app
                   key: username
-            - name: SPRING_DATASOURCE_PASSWORD
+            - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: pg-app
@@ -45,16 +45,21 @@ spec:
             limits:
               cpu: "1"
               memory: 512Mi
-          # Spring Boot 로 바꾸면 path 를 /actuator/health/readiness, /liveness 로 변경
+          # 앱 기동 후 warm-up(60초) 동안 /startupProbe 는 500 응답.
+          # 10초 x 12회 = 최대 120초까지 기다림. 통과 전에는 readiness/liveness 를 검사하지 않음.
+          startupProbe:
+            httpGet:
+              path: /startupProbe
+              port: http
+            periodSeconds: 10
+            failureThreshold: 12
           readinessProbe:
             httpGet:
-              path: /
+              path: /healthcheck
               port: http
-            initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /
+              path: /healthcheck
               port: http
-            initialDelaySeconds: 15
             periodSeconds: 20
