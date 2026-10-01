@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: dev
 resources:
   - ../../base
+  - ingress.yaml
 # 새 버전 배포 시 newTag 만 Docker Hub 의 sha-xxxxxxx 태그로 변경
 images:
   - name: start31/for_k8s_test

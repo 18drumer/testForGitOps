@@ -1,0 +1,51 @@
+# Ingress 컨트롤러: Traefik (Helm chart 41.6.1, Traefik v3.7.13) → namespace: traefik
+# 외부 접속: Cloudflare(*.rio.dpdns.org) → cloudflared → traefik.traefik.svc:80 → Ingress host 로 라우팅
+# 터널이 클러스터 안에서 직접 붙으므로 Service 는 ClusterIP 로 충분 (LoadBalancer/NodePort 불필요)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: op-traefik
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+spec:
+  project: default
+  source:
+    repoURL: https://traefik.github.io/charts
+    chart: traefik
+    targetRevision: 41.6.1
+    helm:
+      releaseName: traefik   # 미지정 시 앱 이름(op-traefik)이 붙어 Service 가 op-traefik 이 됨 → 터널 URL 과 불일치
+      valuesObject:
+        ingressClass:
+          enabled: true
+          isDefaultClass: true   # ingressClassName 을 생략한 Ingress 도 Traefik 이 처리
+          name: traefik
+        service:
+          spec:
+            type: ClusterIP
+          additionalServices:
+            dashboard:           # → Service "traefik-dashboard" (대시보드 포트만 NodePort 로 노출)
+              spec:
+                type: NodePort
+        ports:
+          traefik:               # 대시보드가 붙어 있는 내부 엔트리포인트(8080)
+            expose:
+              default: false     # 터널용 Service(traefik)에는 노출 안 함 → 인터넷에 안 열림
+              dashboard: true    # traefik-dashboard Service 에만 노출
+            nodePort: 30900
+        # 대시보드 접속: http://172.20.10.11:30900/dashboard/ (노드 IP 아무거나, 끝의 / 필수)
+        ingressRoute:
+          dashboard:
+            enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: traefik
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # CRD 가 커서 필요

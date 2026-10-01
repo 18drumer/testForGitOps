@@ -10,6 +10,9 @@ Argo CD 로 dev / staging 환경에 **PostgreSQL · Kafka · Redis · 백엔드(
 | Kafka | Strimzi (chart 1.2.0), KRaft | 1대 |
 | Redis | OT redis-operator (chart 0.26.1) | 단일 인스턴스 |
 | HPA 지표 | metrics-server (chart 3.14.0) | |
+| 외부 접속 | Cloudflare Tunnel (cloudflared 2026.9.3) | `*.rio.dpdns.org` → Traefik |
+| Ingress | Traefik (chart 41.6.1, v3.7.13) | Service ClusterIP (외부 노출은 터널이 담당) |
+| 인증서 | cert-manager (chart v1.21.2) + Let's Encrypt | DNS-01 (Cloudflare API), staging / prod 발급자 |
 | 백엔드 | Deployment + HPA | Pod 2~8개 |
 
 배포 순서 (sync-wave): 오퍼레이터(0) → DB·Kafka·Redis(1) → 백엔드(2)
@@ -21,11 +24,15 @@ k8s-gitops/
 ├── bootstrap/root-app.yaml        # 최초 1회 kubectl apply 하는 파일
 ├── argocd-apps/                   # Argo CD Application 목록 (root 가 읽음)
 │   ├── op-cnpg.yaml / op-strimzi.yaml / op-redis.yaml / op-metrics-server.yaml
+│   ├── op-traefik.yaml / cloudflared.yaml / op-cert-manager.yaml / cert-issuers.yaml
 │   ├── infra-dev.yaml / infra-staging.yaml
 │   └── backend-dev.yaml / backend-staging.yaml
 ├── infra/
 │   ├── base/                      # postgres.yaml, kafka.yaml, redis.yaml
 │   └── overlays/{dev,staging}/    # 환경별 차이
+├── platform/
+│   ├── cloudflared/               # cloudflared Deployment (토큰 Secret 은 Git 밖에서 생성)
+│   └── cert-manager/              # ClusterIssuer (letsencrypt-staging / letsencrypt-prod)
 └── apps/backend/
     ├── base/                      # configmap, deployment, service, hpa
     └── overlays/{dev,staging}/
@@ -101,14 +108,41 @@ Windows 브라우저에서 `https://<노드VM IP>:<443 에 매핑된 포트>` �
 
 ## 5. 루트 앱 등록 (이것 한 번이면 끝)
 
+**Cloudflare Tunnel 사전 준비** (외부 도메인 접속용, 터널 토큰은 Public 저장소에 넣지 않음):
+
+1. Cloudflare Zero Trust → Networks → Tunnels → Create a tunnel (Cloudflared) → 토큰 복사 (설치 명령은 실행 X)
+2. 터널의 Public Hostname: `*` . `rio.dpdns.org` → `HTTP` / `traefik.traefik.svc.cluster.local:80`
+3. DNS 에 `*` CNAME → `<터널ID>.cfargotunnel.com` (Proxied) 가 있는지 확인, 없으면 추가
+4. 토큰 Secret 생성:
+
+```bash
+kubectl create ns cloudflared
+kubectl create secret generic cloudflared-token -n cloudflared --from-literal=token=<터널 토큰>
+```
+
+**Let's Encrypt (cert-manager) 사전 준비** — Cloudflare API 토큰 Secret 생성:
+
+1. Cloudflare 대시보드 → My Profile → API Tokens → Create Token → "Edit zone DNS" 템플릿
+   - Permissions: `Zone / DNS / Edit`, `Zone / Zone / Read`
+   - Zone Resources: `Include / Specific zone / rio.dpdns.org`
+2. 토큰 Secret 생성:
+
+```bash
+kubectl create ns cert-manager
+kubectl create secret generic cloudflare-api-token -n cert-manager --from-literal=api-token=<API 토큰>
+```
+
+이후 새 서비스 공개는 Cloudflare 수정 없이 Ingress 의 `host: <이름>.rio.dpdns.org` 만 추가하면 됩니다.
+(무료 인증서는 한 단계 서브도메인만 지원 → `api-dev.rio.dpdns.org` O, `api.dev.rio.dpdns.org` X)
+
 ```bash
 git clone https://github.com/18drumer/testForGitOps.git   # VM 에 저장소가 없다면
 kubectl apply -f k8s-gitops/bootstrap/root-app.yaml
 ```
 
 이후 흐름:
-1. `root` 앱이 `argocd-apps/` 의 8개 Application 을 생성
-2. 오퍼레이터 4개 설치 (CRD 생성)
+1. `root` 앱이 `argocd-apps/` 의 12개 Application 을 생성
+2. 오퍼레이터 4개 + Traefik + cloudflared + cert-manager 설치 (CRD 생성)
 3. infra-dev / infra-staging 이 PostgreSQL·Kafka·Redis 생성 (CRD 가 아직 없으면 자동 재시도)
 4. backend-dev / backend-staging 배포
 
@@ -116,7 +150,7 @@ kubectl apply -f k8s-gitops/bootstrap/root-app.yaml
 
 ## 6. 배포 확인
 
-UI 에서 9개 앱이 모두 **Synced / Healthy** 가 되면 성공입니다. 터미널로도 확인:
+UI 에서 13개 앱이 모두 **Synced / Healthy** 가 되면 성공입니다. 터미널로도 확인:
 
 ```bash
 kubectl get applications -n argocd
@@ -145,7 +179,28 @@ kubectl exec -it kafka-dual-role-0 -n dev -- \
 
 # 백엔드
 kubectl run curl -n dev --rm -it --image=curlimages/curl --restart=Never -- curl -s http://backend
+
+# 백엔드 (외부: Cloudflare → 터널 → Traefik → backend)
+curl https://api-dev.rio.dpdns.org/
 ```
+
+Let's Encrypt 인증서 발급 확인:
+
+```bash
+kubectl get clusterissuer                     # letsencrypt-staging / prod  READY True
+kubectl get certificate -n dev                # api-dev-tls  READY True (1~3분)
+kubectl describe certificate api-dev-tls -n dev   # 실패 시 Events 확인
+kubectl get challenge -A                      # 진행 중인 DNS-01 검증 (끝나면 사라짐)
+
+# Traefik 이 실제로 내보내는 인증서 확인 (발급자: (STAGING) ... 또는 Let's Encrypt R1x)
+kubectl run tls -n dev --rm -it --image=alpine/openssl --restart=Never -- \
+  s_client -connect traefik.traefik.svc.cluster.local:443 -servername api-dev.rio.dpdns.org </dev/null 2>/dev/null \
+  | grep -E "subject=|issuer="
+```
+
+Traefik 대시보드 (NodePort 30900, 내부망 전용 — 터널/인터넷에는 노출 안 됨):
+
+Windows 브라우저에서 `http://172.20.10.11:30900/dashboard/` (노드 IP 아무거나, 끝의 `/` 필수)
 
 ## 7. HPA 테스트 (Pod 2 → 최대 8)
 
@@ -199,6 +254,9 @@ Spring 프로필은 dev 는 `dev`, staging 은 `prod` 입니다.
 | backend Pod `CreateContainerConfigError` | `pg-app` Secret 이 아직 없음 (DB 생성 중). DB 가 뜨면 자동 해결 |
 | HPA TARGETS 가 `<unknown>` | metrics-server 준비 중. `kubectl top nodes` 가 동작하면 정상 |
 | Pod Pending (Insufficient memory) | 노드 메모리 부족 → VM 메모리 증설 또는 staging 앱 삭제 |
+| cloudflared Pod `CreateContainerConfigError` | `cloudflared-token` Secret 없음 → 아래 "Cloudflare Tunnel" 참고 |
+| 도메인 접속 시 404 | Traefik 까지는 도착. Ingress 의 host 가 접속한 도메인과 같은지 확인 |
+| 도메인 접속 시 502 / 1033 | 터널 끊김 또는 Public Hostname URL 오타 (`traefik.traefik.svc.cluster.local:80`) |
 | 앱이 OutOfSync 반복 | 클러스터를 수동으로 바꾼 것. Git 을 수정해야 함 |
 
 ## 11. 전체 삭제

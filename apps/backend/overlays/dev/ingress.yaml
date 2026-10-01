@@ -1,0 +1,19 @@
+# dev 백엔드 외부 접속: https://api-dev.rio.dpdns.org
+# Cloudflare(HTTPS) → cloudflared → Traefik → Service backend:80
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: api-dev.rio.dpdns.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http
