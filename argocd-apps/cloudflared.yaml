@@ -1,0 +1,27 @@
+# Cloudflare Tunnel 커넥터 (cloudflared) → namespace: cloudflared
+# 클러스터 → Cloudflare 로 나가는 연결만 사용 (퍼블릭 IP·포트포워딩 불필요)
+# 터널 토큰은 Git 에 넣지 않음. 최초 1회 직접 생성:
+#   kubectl create ns cloudflared
+#   kubectl create secret generic cloudflared-token -n cloudflared --from-literal=token=<터널 토큰>
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudflared
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/18drumer/testForGitOps.git   # ← 본인 저장소로 변경
+    targetRevision: main
+    path: platform/cloudflared
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloudflared
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
