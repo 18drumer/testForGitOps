@@ -181,7 +181,8 @@ kubectl exec -it kafka-dual-role-0 -n dev -- \
 kubectl run curl -n dev --rm -it --image=curlimages/curl --restart=Never -- curl -s http://backend
 
 # 백엔드 (외부: Cloudflare → 터널 → Traefik → backend)
-curl https://api-dev.rio.dpdns.org/
+curl https://api-dev.rio.dpdns.org/   # dev
+curl https://api-prd.rio.dpdns.org/   # staging
 ```
 
 Let's Encrypt 인증서 발급 확인:

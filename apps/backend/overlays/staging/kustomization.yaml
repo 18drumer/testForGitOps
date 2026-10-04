@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: staging
 resources:
   - ../../base
+  - ingress.yaml
 images:
   - name: start31/for_k8s_test
     newTag: sha-37069ed
