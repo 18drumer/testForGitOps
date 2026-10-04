@@ -39,6 +39,15 @@ spec:
         ingressRoute:
           dashboard:
             enabled: true
+        # Ingress status(ADDRESS) 채우기 → Argo CD Ingress health 가 Healthy 가 됨
+        # 기본값(publishedService)은 traefik Service 의 LoadBalancer IP 를 복사하는데, ClusterIP 라 비어 있음 → Progressing 고착
+        # publishedService 를 끄고 고정 hostname 을 status 에 기록하도록 변경
+        providers:
+          kubernetesIngress:
+            publishedService:
+              enabled: false
+        additionalArguments:
+          - --providers.kubernetesingress.ingressendpoint.hostname=traefik.traefik.svc.cluster.local
   destination:
     server: https://kubernetes.default.svc
     namespace: traefik
