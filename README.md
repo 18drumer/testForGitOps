@@ -14,6 +14,8 @@ Argo CD 로 dev / staging 환경에 **PostgreSQL · Kafka · Redis · 백엔드(
 | Ingress | Traefik (chart 41.6.1, v3.7.13) | Service ClusterIP (외부 노출은 터널이 담당) |
 | 인증서 | cert-manager (chart v1.21.2) + Let's Encrypt | DNS-01 (Cloudflare API), staging / prod 발급자 |
 | 백엔드 | Deployment + HPA | Pod 2~8개 |
+| 메트릭 | kube-prometheus-stack (chart 91.9.0) | Prometheus · Alertmanager · Grafana, 보존 7일 |
+| 로그 | Loki (grafana-community chart 18.13.8) + Alloy (chart 1.13.0) | Loki 단일 바이너리 + filesystem, 보존 7일 |
 
 배포 순서 (sync-wave): 오퍼레이터(0) → DB·Kafka·Redis(1) → 백엔드(2)
 
@@ -25,6 +27,7 @@ k8s-gitops/
 ├── argocd-apps/                   # Argo CD Application 목록 (root 가 읽음)
 │   ├── op-cnpg.yaml / op-strimzi.yaml / op-redis.yaml / op-metrics-server.yaml
 │   ├── op-traefik.yaml / cloudflared.yaml / op-cert-manager.yaml / cert-issuers.yaml
+│   ├── op-kube-prometheus-stack.yaml / op-loki.yaml / op-alloy.yaml   # 모니터링 (namespace: monitoring)
 │   ├── infra-dev.yaml / infra-staging.yaml
 │   └── backend-dev.yaml / backend-staging.yaml
 ├── infra/
@@ -132,6 +135,13 @@ kubectl create ns cert-manager
 kubectl create secret generic cloudflare-api-token -n cert-manager --from-literal=api-token=<API 토큰>
 ```
 
+**모니터링 사전 준비** — Grafana admin 계정 Secret 생성 (비밀번호를 Public 저장소에 넣지 않음):
+
+```bash
+kubectl create ns monitoring
+kubectl create secret generic grafana-admin -n monitoring   --from-literal=admin-user=admin --from-literal=admin-password='<원하는 비밀번호>'
+```
+
 이후 새 서비스 공개는 Cloudflare 수정 없이 Ingress 의 `host: <이름>.rio.dpdns.org` 만 추가하면 됩니다.
 (무료 인증서는 한 단계 서브도메인만 지원 → `api-dev.rio.dpdns.org` O, `api.dev.rio.dpdns.org` X)
 
@@ -141,7 +151,7 @@ kubectl apply -f k8s-gitops/bootstrap/root-app.yaml
 ```
 
 이후 흐름:
-1. `root` 앱이 `argocd-apps/` 의 12개 Application 을 생성
+1. `root` 앱이 `argocd-apps/` 의 15개 Application 을 생성
 2. 오퍼레이터 4개 + Traefik + cloudflared + cert-manager 설치 (CRD 생성)
 3. infra-dev / infra-staging 이 PostgreSQL·Kafka·Redis 생성 (CRD 가 아직 없으면 자동 재시도)
 4. backend-dev / backend-staging 배포
@@ -150,7 +160,7 @@ kubectl apply -f k8s-gitops/bootstrap/root-app.yaml
 
 ## 6. 배포 확인
 
-UI 에서 13개 앱이 모두 **Synced / Healthy** 가 되면 성공입니다. 터미널로도 확인:
+UI 에서 16개 앱이 모두 **Synced / Healthy** 가 되면 성공입니다. 터미널로도 확인:
 
 ```bash
 kubectl get applications -n argocd
@@ -202,6 +212,20 @@ kubectl run tls -n dev --rm -it --image=alpine/openssl --restart=Never -- \
 Traefik 대시보드 (NodePort 30900, 내부망 전용 — 터널/인터넷에는 노출 안 됨):
 
 Windows 브라우저에서 `http://172.20.10.11:30900/dashboard/` (노드 IP 아무거나, 끝의 `/` 필수)
+
+모니터링 (Grafana NodePort 30300, 내부망 전용):
+
+```bash
+kubectl get pods -n monitoring        # prometheus / alertmanager / grafana / loki-0 / alloy-xxxxx(노드 수만큼) Running
+kubectl get pvc -n monitoring         # prometheus 10Gi / loki 10Gi / grafana 2Gi  Bound
+```
+
+Windows 브라우저에서 `http://172.20.10.11:30300` (노드 IP 아무거나) → `grafana-admin` Secret 의 계정으로 로그인.
+
+- 메트릭: Dashboards → `Kubernetes / Compute Resources / ...` (노드·네임스페이스·Pod CPU/메모리)
+- 로그: Explore → 데이터소스 `Loki` → `{namespace="dev", app="backend"}` 또는 `{namespace="dev"} |= "ERROR"`
+
+kubeadm 은 etcd / scheduler / controller-manager / kube-proxy 메트릭을 127.0.0.1 에만 열기 때문에 이 4개는 수집 대상에서 뺐습니다 (`op-kube-prometheus-stack.yaml` 주석 참고).
 
 ## 7. HPA 테스트 (Pod 2 → 최대 8)
 
@@ -255,6 +279,8 @@ Spring 프로필은 dev 는 `dev`, staging 은 `prod` 입니다.
 | backend Pod `CreateContainerConfigError` | `pg-app` Secret 이 아직 없음 (DB 생성 중). DB 가 뜨면 자동 해결 |
 | HPA TARGETS 가 `<unknown>` | metrics-server 준비 중. `kubectl top nodes` 가 동작하면 정상 |
 | Pod Pending (Insufficient memory) | 노드 메모리 부족 → VM 메모리 증설 또는 staging 앱 삭제 |
+| grafana Pod `CreateContainerConfigError` | `grafana-admin` Secret 없음 → 5단계 "모니터링 사전 준비" |
+| Grafana 에 Loki 로그가 안 보임 | `kubectl logs -n monitoring ds/alloy -c alloy` 에서 push 에러 확인, `loki-0` Pod Running 확인 |
 | cloudflared Pod `CreateContainerConfigError` | `cloudflared-token` Secret 없음 → 아래 "Cloudflare Tunnel" 참고 |
 | 도메인 접속 시 404 | Traefik 까지는 도착. Ingress 의 host 가 접속한 도메인과 같은지 확인 |
 | 도메인 접속 시 502 / 1033 | 터널 끊김 또는 Public Hostname URL 오타 (`traefik.traefik.svc.cluster.local:80`) |
@@ -265,4 +291,5 @@ Spring 프로필은 dev 는 `dev`, staging 은 `prod` 입니다.
 ```bash
 kubectl delete applications --all -n argocd   # Argo CD 앱 삭제 (먼저 해야 자동 복구가 안 됨)
 kubectl delete ns dev staging                  # DB·Kafka·Redis·백엔드 삭제 (데이터 포함)
+kubectl delete ns monitoring                   # Prometheus·Loki·Grafana 삭제 (데이터 포함)
 ```

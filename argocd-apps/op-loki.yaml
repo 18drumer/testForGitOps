@@ -1,0 +1,83 @@
+# 로그 저장소: Loki (grafana-community Helm chart 18.13.8, Loki 3.7) → namespace: monitoring
+# Monolithic(단일 바이너리) + filesystem 모드: S3/MinIO 같은 오브젝트 스토리지 없이 PVC 에 로그 저장
+# filesystem 모드는 replica 1 개만 가능 (차트가 2 이상이면 실패 처리)
+# 주소: http://loki.monitoring.svc.cluster.local:3100 (Alloy 가 push, Grafana 가 조회)
+# ※ grafana/helm-charts 의 loki 차트는 Enterprise(GEL) 용으로 바뀜 → OSS 는 grafana-community 저장소 사용
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: op-loki
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+spec:
+  project: default
+  source:
+    repoURL: https://grafana-community.github.io/helm-charts
+    chart: loki
+    targetRevision: 18.13.8
+    helm:
+      releaseName: loki   # Service 이름이 loki 가 되도록 (Grafana 데이터소스·Alloy 주소와 맞춤)
+      valuesObject:
+        deploymentMode: Monolithic
+        loki:
+          auth_enabled: false        # 멀티테넌시 끔 (X-Scope-OrgID 헤더 없이 사용)
+          commonConfig:
+            replication_factor: 1
+          storage:
+            type: filesystem         # 기본 경로 /var/loki/chunks (= PVC)
+          schemaConfig:
+            configs:
+              - from: "2024-04-01"
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index:
+                  prefix: index_
+                  period: 24h
+          compactor:                 # 보존 기간 지난 로그 삭제
+            retention_enabled: true
+            delete_request_store: filesystem
+          limits_config:
+            retention_period: 168h   # 7일
+        singleBinary:
+          replicas: 1
+          persistence:
+            enabled: true
+            size: 10Gi
+            # storageClass 생략 → default StorageClass(local-path) 사용
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+        # 차트 기본값은 SimpleScalable 용 replica 3 → Monolithic 에서는 0 이어야 함
+        backend:
+          replicas: 0
+        read:
+          replicas: 0
+        write:
+          replicas: 0
+        # memcached 캐시(기본 chunks-cache 메모리 8GB 요청) 끔 → 소규모에선 불필요
+        chunksCache:
+          enabled: false
+        resultsCache:
+          enabled: false
+        gateway:
+          enabled: false             # nginx 게이트웨이 없이 loki:3100 으로 직접 접근
+        lokiCanary:
+          enabled: false
+        test:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

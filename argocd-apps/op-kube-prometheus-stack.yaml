@@ -1,0 +1,95 @@
+# 메트릭 모니터링: kube-prometheus-stack (Helm chart 91.9.0) → namespace: monitoring
+# Prometheus Operator + Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics
+# Grafana 접속: http://<노드IP>:30300 (내부망 전용 NodePort, 터널/인터넷에는 노출 안 됨)
+# Grafana admin 계정은 Git 밖에서 만든 Secret(grafana-admin) 사용 → README "모니터링" 참고
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: op-kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 91.9.0
+    helm:
+      releaseName: kps   # 리소스 이름이 길어지지 않도록 짧게 (kps-prometheus, kps-grafana ...)
+      valuesObject:
+        # kubeadm 은 etcd / scheduler / controller-manager / kube-proxy 메트릭을 127.0.0.1 에만 열어서
+        # 기본값대로 두면 수집 실패 → TargetDown 알람이 계속 뜸. 실습 클러스터라 수집 대상에서 제외
+        # (필요하면 각 노드의 static pod manifest 에서 bind-address 를 0.0.0.0 으로 바꾼 뒤 enabled: true)
+        kubeEtcd:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        kubeProxy:
+          enabled: false
+
+        prometheus:
+          prometheusSpec:
+            # 차트 라벨이 없는 ServiceMonitor/PodMonitor/Rule 도 수집 (CNPG·Strimzi·Traefik 등 다른 앱 것까지)
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            probeSelectorNilUsesHelmValues: false
+            retention: 7d
+            retentionSize: 8GB          # PVC(10Gi) 보다 작게 → 디스크 꽉 차기 전에 오래된 데이터부터 삭제
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                memory: 2Gi
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  # storageClassName 생략 → default StorageClass(local-path) 사용
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 10Gi
+
+        alertmanager:
+          alertmanagerSpec:
+            resources:
+              requests:
+                cpu: 10m
+                memory: 64Mi
+
+        grafana:
+          # 차트 기본값은 lookup 으로 비밀번호를 재사용하는데 Argo CD 에서는 lookup 이 안 돼서
+          # sync 할 때마다 랜덤 비밀번호가 새로 생성됨(OutOfSync 반복) → 미리 만든 Secret 사용
+          admin:
+            existingSecret: grafana-admin
+            userKey: admin-user
+            passwordKey: admin-password
+          defaultDashboardsTimezone: Asia/Seoul
+          service:
+            type: NodePort
+            nodePort: 30300
+          persistence:              # UI 에서 직접 만든 대시보드가 재시작 후에도 남도록
+            enabled: true
+            size: 2Gi
+          additionalDataSources:
+            - name: Loki
+              type: loki
+              access: proxy
+              url: http://loki.monitoring.svc.cluster.local:3100
+              jsonData:
+                maxLines: 1000
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # CRD 가 커서 필요
