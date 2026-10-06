@@ -8,6 +8,7 @@ Argo CD 로 dev / staging 환경에 **PostgreSQL · Kafka · Redis · 백엔드(
 |---|---|---|
 | PostgreSQL | CloudNativePG (chart 0.29.1) | dev 1대 / staging 2대 |
 | Kafka | Strimzi (chart 1.2.0), KRaft | 1대 |
+| Kafka UI | Kafbat UI | dev / staging 통합 웹 대시보드 (`https://kafka.rio.dpdns.org`) |
 | Redis | OT redis-operator (chart 0.26.1) | 단일 인스턴스 |
 | HPA 지표 | metrics-server (chart 3.14.0) | |
 | 외부 접속 | Cloudflare Tunnel (cloudflared 2026.9.3) | `*.rio.dpdns.org` → Traefik |
@@ -29,12 +30,14 @@ k8s-gitops/
 │   ├── op-traefik.yaml / cloudflared.yaml / op-cert-manager.yaml / cert-issuers.yaml
 │   ├── op-kube-prometheus-stack.yaml / op-loki.yaml / op-alloy.yaml   # 모니터링 (namespace: monitoring)
 │   ├── infra-dev.yaml / infra-staging.yaml
+│   ├── kafbat-ui.yaml             # Kafka 관리 UI
 │   └── backend-dev.yaml / backend-staging.yaml
 ├── infra/
 │   ├── base/                      # postgres.yaml, kafka.yaml, redis.yaml
 │   └── overlays/{dev,staging}/    # 환경별 차이
 ├── platform/
 │   ├── cloudflared/               # cloudflared Deployment (토큰 Secret 은 Git 밖에서 생성)
+│   ├── kafbat-ui/                 # Kafbat UI (dev + staging 멀티 클러스터 대시보드)
 │   └── cert-manager/              # ClusterIssuer (letsencrypt-staging / letsencrypt-prod)
 └── apps/backend/
     ├── base/                      # configmap, deployment, service, hpa
@@ -193,6 +196,9 @@ kubectl run curl -n dev --rm -it --image=curlimages/curl --restart=Never -- curl
 # 백엔드 (외부: Cloudflare → 터널 → Traefik → backend)
 curl https://api-dev.rio.dpdns.org/   # dev
 curl https://api-prd.rio.dpdns.org/   # staging
+
+# Kafbat UI (웹 브라우저 접속)
+# https://kafka.rio.dpdns.org (dev / staging 클러스터 선택 가능)
 ```
 
 Let's Encrypt 인증서 발급 확인:

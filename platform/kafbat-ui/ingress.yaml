@@ -1,0 +1,19 @@
+# Kafbat UI 외부 접속: https://kafka.rio.dpdns.org
+# Cloudflare(HTTPS) → cloudflared → Traefik → Service kafbat-ui:80
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kafbat-ui
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: kafka.rio.dpdns.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kafbat-ui
+                port:
+                  name: http
