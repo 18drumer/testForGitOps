@@ -7,7 +7,7 @@ resources:
   - ingress.yaml
 images:
   - name: start31/for_k8s_test
-    newTag: sha-37069ed
+    newTag: sha-a46621a
 patches:
   # 앱에 application-staging.properties 가 없으므로 운영과 같은 prod 프로필 사용
   # (prod 는 DB 접속 정보 기본값이 없어서 주입이 빠지면 기동 실패 → 설정 누락을 바로 알 수 있음)
