@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: dev
 resources:
   - ../../base
+  - kafka-topic-test-order.yaml
 patches:
   - target:
       kind: Service

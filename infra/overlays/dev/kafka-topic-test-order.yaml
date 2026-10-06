@@ -1,0 +1,9 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: test-order
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  partitions: 4
+  replicas: 1
