@@ -142,7 +142,16 @@ kubectl create secret generic cloudflare-api-token -n cert-manager --from-litera
 
 ```bash
 kubectl create ns monitoring
-kubectl create secret generic grafana-admin -n monitoring   --from-literal=admin-user=admin --from-literal=admin-password='<원하는 비밀번호>'
+kubectl create secret generic grafana-admin -n monitoring \
+  --from-literal=admin-user=admin --from-literal=admin-password='<원하는 비밀번호>'
+```
+
+**Kafbat UI 사전 준비** — 웹 대시보드 로그인 계정 Secret 생성 (비밀번호를 Public 저장소에 넣지 않음):
+
+```bash
+kubectl create ns kafka-ui
+kubectl create secret generic kafbat-ui-secret -n kafka-ui \
+  --from-literal=username='<원하는 계정>' --from-literal=password='<원하는 비밀번호>'
 ```
 
 이후 새 서비스 공개는 Cloudflare 수정 없이 Ingress 의 `host: <이름>.rio.dpdns.org` 만 추가하면 됩니다.

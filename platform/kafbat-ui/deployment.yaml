@@ -21,6 +21,18 @@ spec:
           env:
             - name: DYNAMIC_CONFIG_ENABLED
               value: "true"
+            - name: AUTH_TYPE
+              value: "LOGIN_FORM"
+            - name: SPRING_SECURITY_USER_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: kafbat-ui-secret
+                  key: username
+            - name: SPRING_SECURITY_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafbat-ui-secret
+                  key: password
             - name: KAFKA_CLUSTERS_0_NAME
               value: "dev"
             - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
